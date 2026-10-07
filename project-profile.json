@@ -1,0 +1,11 @@
+{
+  "projectId": "pair-wise-yy-01",
+  "projectName": "FormCraft 低代码表单搭建器",
+  "category": "低代码搭建",
+  "businessDomain": "研发工具",
+  "projectForm": "完整项目",
+  "codeScope": "frontend",
+  "languages": "Vue 3, TypeScript, Element Plus, Pinia, Vue Router, Vite",
+  "summary": "可视化拖拽搭建表单，支持组件库、嵌套布局、校验规则、联动条件、JSON 序列化与实时预览。",
+  "containerized": false
+}
