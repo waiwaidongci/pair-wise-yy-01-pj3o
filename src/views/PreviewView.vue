@@ -1,33 +1,60 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import RuntimeField from '../components/RuntimeField.vue'
-import { useDesignerStore } from '../stores/designer'
+import { useRevisionStore } from '../stores/revision'
 import type { FieldNode, RuntimeValueMap } from '../types/form'
-import { evaluateCondition, validateValue } from '../utils/schema'
+import { evaluateCondition, flattenNodes, validateValue } from '../utils/schema'
 
-const store = useDesignerStore()
+const revisionStore = useRevisionStore()
 const values = reactive<RuntimeValueMap>({})
 const errors = reactive<Record<string, string>>({})
 const submitted = ref(false)
 
+// 预览始终以合并结果为准：任一标签页提交修订后这里立即失效重算
+const formNodes = computed(() => revisionStore.mergedSchema.nodes)
+const formTitle = computed(() => revisionStore.mergedSchema.title)
+const formDescription = computed(() => revisionStore.mergedSchema.description)
+
 function applyDefaults(nodes: FieldNode[]) {
   nodes.forEach((node) => {
-    if (node.type === 'table') values[node.name] = []
-    else if (node.defaultValue !== undefined) values[node.name] = node.defaultValue
-    else if (node.type === 'select' || node.type === 'date') values[node.name] = ''
-    else if (node.type !== 'group' && node.type !== 'container') values[node.name] = ''
+    if (node.type === 'table') values[node.name] ??= []
+    else if (node.defaultValue !== undefined) values[node.name] ??= node.defaultValue
+    else if (node.type !== 'group' && node.type !== 'container') values[node.name] ??= ''
     applyDefaults(node.children ?? [])
   })
 }
-applyDefaults(store.nodes)
+applyDefaults(formNodes.value)
+
+// 联动条件按字段 id 引用，这里把 id 映射到当前填写值
+const valuesById = computed<RuntimeValueMap>(() => {
+  const map: RuntimeValueMap = {}
+  const walk = (nodes: FieldNode[]) => nodes.forEach((node) => {
+    map[node.id] = values[node.name]
+    walk(node.children ?? [])
+  })
+  walk(formNodes.value)
+  return map
+})
+
+// 合并结果一改动：裁剪已移除字段的值与错误、为新字段补默认值，条件与校验立即重算
+watch(() => revisionStore.mergeVersion, () => {
+  const validNames = new Set(flattenNodes(formNodes.value).map((node) => node.name))
+  Object.keys(values).forEach((key) => {
+    if (!validNames.has(key)) delete values[key]
+  })
+  Object.keys(errors).forEach((key) => {
+    if (!validNames.has(key)) delete errors[key]
+  })
+  applyDefaults(formNodes.value)
+})
 
 const visibleCount = computed(() => {
   const walk = (nodes: FieldNode[]): number => nodes.reduce((count, node) => {
-    if (!evaluateCondition(node.condition, values)) return count
+    if (!evaluateCondition(node.condition, valuesById.value)) return count
     return count + 1 + walk(node.children ?? [])
   }, 0)
-  return walk(store.nodes)
+  return walk(formNodes.value)
 })
 
 function updateValue(name: string, value: unknown) {
@@ -42,7 +69,7 @@ function updateError(name: string, error: string) {
 function validateAll(nodes: FieldNode[]) {
   let valid = true
   nodes.forEach((node) => {
-    if (!evaluateCondition(node.condition, values)) return
+    if (!evaluateCondition(node.condition, valuesById.value)) return
     if (node.type !== 'group' && node.type !== 'container') {
       const error = validateValue(values[node.name], node.validation)
       if (error) {
@@ -58,7 +85,7 @@ function validateAll(nodes: FieldNode[]) {
 function submit() {
   Object.keys(errors).forEach((key) => delete errors[key])
   submitted.value = true
-  if (!validateAll(store.nodes)) {
+  if (!validateAll(formNodes.value)) {
     ElMessage.error('表单校验未通过，请检查红色提示')
     return
   }
@@ -69,13 +96,24 @@ function submit() {
 <template>
   <div class="preview-wrap">
     <div class="preview-card">
-      <h1>{{ store.title }}</h1>
-      <p>{{ store.description }}</p>
+      <el-alert
+        v-if="revisionStore.dangling.length"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        存在 {{ revisionStore.dangling.length }} 处悬空联动条件，对应字段已隐藏；
+        请回到设计器的「修订与发布」面板处理后再发布。
+      </el-alert>
+      <h1>{{ formTitle }}</h1>
+      <p>{{ formDescription }}</p>
       <RuntimeField
-        v-for="node in store.nodes"
+        v-for="node in formNodes"
         :key="node.id"
         :node="node"
         :values="values"
+        :values-by-id="valuesById"
         :errors="errors"
         @update="updateValue"
         @error="updateError"
@@ -84,6 +122,7 @@ function submit() {
       <div class="summary-box">
         当前可见字段：{{ visibleCount }} 个；校验错误：{{ Object.keys(errors).length }} 个。
         <span v-if="submitted">最近一次提交已触发完整条件显隐与校验流程。</span>
+        <span>数据基于基线 v{{ revisionStore.baseline.version }} + {{ revisionStore.revisionCount }} 条修订的合并结果。</span>
       </div>
     </div>
   </div>

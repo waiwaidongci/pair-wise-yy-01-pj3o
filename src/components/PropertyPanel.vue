@@ -35,7 +35,7 @@ function columnsChanged() {
 }
 
 function clearCondition() {
-  store.updateSelected({ condition: undefined })
+  store.updateCondition({ fieldId: '' })
 }
 
 function setConditionField(fieldId: string) {

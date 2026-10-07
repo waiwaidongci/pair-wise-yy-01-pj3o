@@ -1,16 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import ComponentPalette from '../components/ComponentPalette.vue'
 import DesignerCanvas from '../components/DesignerCanvas.vue'
 import PropertyPanel from '../components/PropertyPanel.vue'
+import RevisionPanel from '../components/RevisionPanel.vue'
 import { useDesignerStore } from '../stores/designer'
+import { useRevisionStore } from '../stores/revision'
 import type { FormSchema } from '../types/form'
 
 const store = useDesignerStore()
+const revisionStore = useRevisionStore()
 const importVisible = ref(false)
 const importText = ref('')
+const revisionsVisible = ref(false)
+
+onMounted(() => {
+  if (revisionStore.migratedFromLegacy) {
+    revisionStore.migratedFromLegacy = false
+    ElMessage.success('检测到旧版本地草稿，已迁移为基线 v1，原内容完整保留')
+  }
+})
 
 function exportJson() {
   const content = JSON.stringify(store.schema, null, 2)
@@ -43,9 +54,13 @@ function applyImport() {
 <template>
   <div class="designer-grid">
     <ComponentPalette />
-    <DesignerCanvas @import-json="importVisible = true" />
+    <DesignerCanvas @import-json="importVisible = true" @show-revisions="revisionsVisible = true" />
     <PropertyPanel />
   </div>
+
+  <el-drawer v-model="revisionsVisible" title="修订与发布" size="420px">
+    <RevisionPanel @close="revisionsVisible = false" />
+  </el-drawer>
 
   <div style="position: fixed; right: 320px; bottom: 16px; z-index: 10">
     <el-button type="primary" @click="showExport">

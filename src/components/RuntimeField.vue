@@ -7,6 +7,8 @@ import { evaluateCondition, validateValue } from '../utils/schema'
 const props = defineProps<{
   node: FieldNode
   values: RuntimeValueMap
+  /** 字段 id → 当前填写值，用于联动条件求值（条件按字段 id 引用） */
+  valuesById: RuntimeValueMap
   errors: Record<string, string>
 }>()
 
@@ -15,7 +17,7 @@ const emit = defineEmits<{
   error: [fieldName: string, error: string]
 }>()
 
-const visible = computed(() => evaluateCondition(props.node.condition, props.values))
+const visible = computed(() => evaluateCondition(props.node.condition, props.valuesById))
 const isContainer = computed(() => props.node.type === 'group' || props.node.type === 'container')
 const tableRows = computed(() => {
   const value = props.values[props.node.name]
@@ -52,6 +54,7 @@ function removeTableRow(rowIndex: number) {
         :key="child.id"
         :node="child"
         :values="values"
+        :values-by-id="valuesById"
         :errors="errors"
         @update="(name, value) => emit('update', name, value)"
         @error="(name, error) => emit('error', name, error)"

@@ -99,6 +99,8 @@ export function moveNode(nodes: FieldNode[], sourceId: string, targetParentId?: 
 
 export function evaluateCondition(condition: VisibilityCondition | undefined, values: RuntimeValueMap): boolean {
   if (!condition?.fieldId) return true
+  // 悬空引用：目标字段已被移动出画布或移除，条件立即失效（预览中隐藏），并列入待修复
+  if (!(condition.fieldId in values)) return false
   const current = values[condition.fieldId]
   const compare = condition.value
   switch (condition.operator) {
