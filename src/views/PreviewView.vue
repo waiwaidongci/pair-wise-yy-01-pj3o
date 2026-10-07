@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import RuntimeField from '../components/RuntimeField.vue'
 import { useDesignerStore } from '../stores/designer'
@@ -21,6 +21,15 @@ function applyDefaults(nodes: FieldNode[]) {
   })
 }
 applyDefaults(store.nodes)
+
+// When the merged schema changes (remote merge, conflict resolution, publish),
+// invalidate the preview's derived state and re-run condition evaluation.
+watch(() => store.schemaRev, () => {
+  Object.keys(values).forEach((key) => delete values[key])
+  Object.keys(errors).forEach((key) => delete errors[key])
+  submitted.value = false
+  applyDefaults(store.nodes)
+})
 
 const visibleCount = computed(() => {
   const walk = (nodes: FieldNode[]): number => nodes.reduce((count, node) => {
